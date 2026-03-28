@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แผนที่ท่องเที่ยว จะบังติกอ</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;600;700&family=Cinzel:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+  :root {
+    --gold: #c9a84c;
+    --gold-light: #f0d080;
+    --teal: #0abf8f;
+    --dark: #050e1a;
+    --panel: rgba(5, 20, 40, 0.92);
+    --text: #e8dfc8;
+    --accent: #1a6b9a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'Noto Sans Thai', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ─── HEADER BAR ─── */
+  .header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 64px;
+    background: var(--panel);
+    border-bottom: 1px solid rgba(201,168,76,0.3);
+    backdrop-filter: blur(16px);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    z-index: 1000;
+    gap: 16px;
+  }
+
+  .header-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .header-title {
+    font-family: 'Cinzel', serif;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: var(--gold-light);
+    line-height: 1.2;
+  }
+
+  .header-subtitle {
+    font-size: 11px;
+    color: rgba(232,223,200,0.55);
+    letter-spacing: 1px;
+  }
+
+  .header-controls {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+  }
+
+  .ctrl-btn {
+    background: rgba(201,168,76,0.12);
+    border: 1px solid rgba(201,168,76,0.35);
+    color: var(--gold-light);
+    padding: 7px 16px;
+    border-radius: 30px;
+    font-family: 'Noto Sans Thai', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .25s;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn:hover {
+    background: rgba(201,168,76,0.28);
+    border-color: var(--gold);
+  }
+
+  .ctrl-btn.active {
+    background: linear-gradient(135deg, var(--gold), #a07830);
+    border-color: var(--gold);
+    color: #0a1520;
+    font-weight: 700;
+  }
+
+  /* ─── MAP ─── */
+  #map {
+    position: fixed;
+    top: 64px; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+  }
+
+  /* ─── SIDE PANEL ─── */
+  .side-panel {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    width: 320px;
+    bottom: 0;
+    background: var(--panel);
+    border-right: 1px solid rgba(201,168,76,0.2);
+    backdrop-filter: blur(20px);
+    z-index: 500;
+    overflow-y: auto;
+    transform: translateX(0);
+    transition: transform .4s cubic-bezier(.4,0,.2,1);
+    padding-bottom: 30px;
+  }
+
+  .side-panel.collapsed {
+    transform: translateX(-320px);
+  }
+
+  .panel-toggle {
+    position: fixed;
+    top: 50%;
+    left: 320px;
+    transform: translateY(-50%);
+    z-index: 600;
+    width: 24px;
+    height: 56px;
+    background: var(--panel);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gold);
+    font-size: 12px;
+    transition: left .4s cubic-bezier(.4,0,.2,1), background .2s;
+    backdrop-filter: blur(16px);
+  }
+
+  .panel-toggle:hover { background: rgba(201,168,76,0.2); }
+
+  .panel-toggle.collapsed { left: 0; }
+
+  .panel-section {
+    padding: 20px 20px 0;
+  }
+
+  .panel-label {
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+  }
+
+  .place-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(201,168,76,0.15);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all .25s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .place-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--gold);
+    border-radius: 3px 0 0 3px;
+    transform: scaleY(0);
+    transition: transform .25s;
+  }
+
+  .place-card:hover, .place-card.active {
+    background: rgba(201,168,76,0.08);
+    border-color: rgba(201,168,76,0.4);
+    transform: translateX(4px);
+  }
+
+  .place-card:hover::before, .place-card.active::before {
+    transform: scaleY(1);
+  }
+
+  .card-type {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--teal);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gold-light);
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+
+  .card-detail {
+    font-size: 12px;
+    color: rgba(232,223,200,0.65);
+    line-height: 1.6;
+  }
+
+  .card-coords {
+    margin-top: 8px;
+    font-size: 10px;
+    color: rgba(232,223,200,0.4);
+    font-family: monospace;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .action-btn {
+    flex: 1;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'Noto Sans Thai', sans-serif;
+    font-weight: 600;
+    transition: all .2s;
+    text-decoration: none;
+    text-align: center;
+    display: block;
+  }
+
+  .action-zoom {
+    background: rgba(10,191,143,0.2);
+    border: 1px solid rgba(10,191,143,0.4);
+    color: var(--teal);
+  }
+
+  .action-zoom:hover { background: rgba(10,191,143,0.35); }
+
+  .action-gmap {
+    background: rgba(26,107,154,0.2);
+    border: 1px solid rgba(26,107,154,0.4);
+    color: #5bc0f0;
+  }
+
+  .action-gmap:hover { background: rgba(26,107,154,0.35); }
+
+  .action-pano {
+    background: rgba(180,80,220,0.18);
+    border: 1px solid rgba(180,80,220,0.4);
+    color: #d880ff;
+    flex: 0.55;
+  }
+
+  .action-pano:hover { background: rgba(180,80,220,0.32); }
+
+  /* ─── STATS BAR ─── */
+  .stats-bar {
+    position: fixed;
+    bottom: 0;
+    left: 320px;
+    right: 0;
+    height: 44px;
+    background: var(--panel);
+    border-top: 1px solid rgba(201,168,76,0.2);
+    backdrop-filter: blur(16px);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 28px;
+    font-size: 11px;
+    color: rgba(232,223,200,0.5);
+    letter-spacing: 0.5px;
+    transition: left .4s cubic-bezier(.4,0,.2,1);
+  }
+
+  .stats-bar.collapsed { left: 0; }
+
+  .stat-item span { color: var(--gold-light); font-weight: 600; }
+
+  /* ─── LEAFLET POPUP OVERRIDES ─── */
+  .leaflet-popup-content-wrapper {
+    background: #0a1a2e !important;
+    border: 1px solid rgba(201,168,76,0.4) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+    color: var(--text) !important;
+  }
+
+  .leaflet-popup-tip { background: #0a1a2e !important; }
+  .leaflet-popup-content { margin: 0 !important; }
+  .leaflet-popup-close-button {
+    color: var(--gold) !important;
+    font-size: 18px !important;
+    padding: 6px 8px !important;
+  }
+
+  .popup-inner { padding: 18px; width: 240px; }
+  .popup-type  { font-size: 10px; letter-spacing: 1.5px; color: var(--teal); text-transform: uppercase; margin-bottom: 4px; }
+  .popup-name  { font-size: 16px; font-weight: 700; color: var(--gold-light); margin-bottom: 8px; line-height: 1.3; }
+  .popup-detail{ font-size: 12px; color: rgba(232,223,200,0.7); line-height: 1.65; margin-bottom: 12px; }
+  .popup-coords{ font-size: 10px; color: rgba(232,223,200,0.35); font-family: monospace; margin-bottom: 12px; }
+  .popup-actions{ display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-icon">🕌</div>
+  <div>
+    <div class="header-title">JABANG TIKOH MAP</div>
+    <div class="header-subtitle">แผนที่ท่องเที่ยว · จะบังติกอ · ปัตตานี</div>
+  </div>
+  <div class="header-controls">
+    <button class="ctrl-btn active" id="btn-satellite" onclick="switchLayer('satellite')">🛰 ดาวเทียม</button>
+    <button class="ctrl-btn" id="btn-street" onclick="switchLayer('street')">🗺 แผนที่</button>
+    <button type="button" class="ctrl-btn" id="btn-route" onclick="toggleRoute()">📍 เส้นทาง</button>
+  </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div class="side-panel" id="sidePanel">
+  <div class="panel-section" style="padding-top:20px;">
+    <div class="panel-label">📍 สถานที่ทั้งหมด</div>
+    <div id="placeList"></div>
+  </div>
+</div>
+
+<div class="panel-toggle" id="panelToggle" onclick="togglePanel()">❮</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- STATS BAR -->
+<div class="stats-bar" id="statsBar">
+  <div class="stat-item">สถานที่ <span id="statCount">0</span> แห่ง</div>
+  <div class="stat-item">เส้นทาง <span id="statRoute">—</span></div>
+  <div class="stat-item" style="margin-left:auto; color:rgba(232,223,200,0.3)">คลิกที่ pin เพื่อดูรายละเอียด · ลาก/ซูม เพื่อสำรวจ</div>
+</div>
+
+<script>
+/* ─── DATA ─── */
+let places = [
+  {
+    id: 1,
+    name: "มัสยิดรายอฟาฎอนี",
+    lat: 6.8561812407256815,
+    lng: 101.25108107704142,
+    detail: "มัสยิดเก่าแก่ที่มีความสำคัญทางประวัติศาสตร์และศาสนา เป็นศูนย์กลางของชุมชนมุสลิมในพื้นที่จะบังติกอ",
+    type: "Religious Tourism"
+  },
+  {
+    id: 2,
+    name: "วังจะบังติกอ",
+    lat: 6.8559329027324205,
+    lng: 101.24891724284335,
+    detail: "อาคารวังเก่าที่มีคุณค่าทางประวัติศาสตร์ สะท้อนถึงเรื่องราวและวัฒนธรรมของอาณาจักรในอดีต",
+    type: "Historical Tourism"
+  },
+  {
+    id: 3,
+    name: "ตลาดนัดรอมฎอนจะบังติกอ",
+    lat: 6.856847059035328,
+    lng: 101.25238900132936,
+    detail: "ตลาดนัดที่เปิดในช่วงเดือนรอมฎอน จำหน่ายอาหาร ขนม และสินค้าท้องถิ่นที่หลากหลาย บรรยากาศคึกคักและเป็นเอกลักษณ์",
+    type: "Market / Food"
+  }
+];
+
+let map, satelliteLayer, streetLayer;
+let markers = {};
+let panelOpen = true;
+
+const typeColors = {
+  "Religious Tourism":  "#f0a020",
+  "Cultural Tourism":   "#a06cf0",
+  "Nature Tourism":     "#0abf8f",
+  "Community Tourism":  "#20c0f0",
+  "Market / Food":      "#f05060",
+  "Historical Tourism": "#c9a84c",
+  "Beach Tourism":      "#40c8e0",
+  "Health Tourism":     "#80e070",
+};
+
+/* ─── PANORAMA URL ─── */
+function panoUrl(lat, lng) {
+  if (lat === 6.8561812407256815 && lng === 101.25108107704142) return "./Panofile/Rayafatoni.html";
+  if (lat === 6.8559329027324205 && lng === 101.24891724284335) return "./Panofile/wangchabangtiko.html";
+  if (lat === 6.856847059035328  && lng === 101.25238900132936) return "./Panofile/market.html";
+  return "#";
+}
+
+/* ─── MAP INIT ─── */
+window.addEventListener('load', () => {
+  map = L.map('map', { zoomControl: false }).setView([6.856, 101.251], 16);
+
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  satelliteLayer = L.tileLayer(
+    'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    { subdomains: '0123', maxZoom: 20, attribution: '© Google Maps' }
+  );
+
+  streetLayer = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { maxZoom: 20, attribution: '© OpenStreetMap' }
+  );
+
+  satelliteLayer.addTo(map);
+  renderAll();
+});
+
+/* ─── LAYER SWITCH ─── */
+function switchLayer(type) {
+  if (type === 'satellite') {
+    map.removeLayer(streetLayer);
+    satelliteLayer.addTo(map);
+    document.getElementById('btn-satellite').classList.add('active');
+    document.getElementById('btn-street').classList.remove('active');
+  } else {
+    map.removeLayer(satelliteLayer);
+    streetLayer.addTo(map);
+    document.getElementById('btn-street').classList.add('active');
+    document.getElementById('btn-satellite').classList.remove('active');
+  }
+}
+
+/* ─── RENDER MARKERS + PANEL ─── */
+function renderAll() {
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+
+  const list = document.getElementById('placeList');
+  list.innerHTML = '';
+  document.getElementById('statCount').textContent = places.length;
+
+  places.forEach(p => addMarkerAndCard(p));
+}
+
+function addMarkerAndCard(p) {
+  const color = typeColors[p.type] || '#c9a84c';
+
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:36px;height:36px;
+      background:${color};
+      border:3px solid white;
+      border-radius:50% 50% 50% 0;
+      transform:rotate(-45deg);
+      box-shadow:0 4px 14px rgba(0,0,0,0.5);
+    "></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -38]
+  });
+
+  const marker = L.marker([p.lat, p.lng], { icon }).addTo(map);
+
+  const popup = L.popup({ maxWidth: 290, closeButton: true }).setContent(`
+    <div class="popup-inner">
+      <div class="popup-type">${p.type}</div>
+      <div class="popup-name">${p.name}</div>
+      <div class="popup-detail">${p.detail}</div>
+      <div class="popup-coords">📍 ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
+      <div class="popup-actions">
+        <button class="action-btn action-zoom" onclick="zoomTo(${p.lat},${p.lng})">🔍 ซูม</button>
+        <a class="action-btn action-gmap" target="_blank"
+          href="https://www.google.com/maps?q=${p.lat},${p.lng}">🗺 Maps</a>
+        <a class="action-btn action-pano" target="_blank"
+          href="${panoUrl(p.lat, p.lng)}">🔭 Panorama</a>
+      </div>
+    </div>
+  `);
+
+  marker.bindPopup(popup);
+  marker.on('click', () => highlightCard(p.id));
+  markers[p.id] = marker;
+
+  // Side panel card
+  const card = document.createElement('div');
+  card.className = 'place-card';
+  card.id = `card-${p.id}`;
+  card.innerHTML = `
+    <div class="card-type">${p.type}</div>
+    <div class="card-name">${p.name}</div>
+    <div class="card-detail">${p.detail}</div>
+    <div class="card-coords">📍 ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>
+    <div class="card-actions">
+      <button class="action-btn action-zoom" onclick="zoomTo(${p.lat},${p.lng});event.stopPropagation()">🔍 ซูม</button>
+      <a class="action-btn action-gmap" href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" onclick="event.stopPropagation()">Google Maps</a>
+      <a class="action-btn action-pano" href="${panoUrl(p.lat, p.lng)}" target="_blank" onclick="event.stopPropagation()">🔭 Panorama</a>
+    </div>
+  `;
+  card.addEventListener('click', () => {
+    zoomTo(p.lat, p.lng);
+    markers[p.id].openPopup();
+    highlightCard(p.id);
+  });
+
+  document.getElementById('placeList').appendChild(card);
+}
+
+/* ─── HIGHLIGHT CARD ─── */             
+function highlightCard(id) {
+  document.querySelectorAll('.place-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById(`card-${id}`);
+  if (card) {
+    card.classList.add('active');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}                                         
+
+/* ─── ROUTE → ลิงก์ไป route.html ─── */ // ← ฟังก์ชันอยู่นอก highlightCard แล้ว
+function toggleRoute() {
+  window.location.href = "route.html";
+}
+
+/* ─── ZOOM ─── */
+function zoomTo(lat, lng) {
+  map.flyTo([lat, lng], 18, { duration: 1.2 });
+}
+
+/* ─── PANEL TOGGLE ─── */
+function togglePanel() {
+  panelOpen = !panelOpen;
+  const panel  = document.getElementById('sidePanel');
+  const toggle = document.getElementById('panelToggle');
+  const stats  = document.getElementById('statsBar');
+
+  panel.classList.toggle('collapsed', !panelOpen);
+  toggle.classList.toggle('collapsed', !panelOpen);
+  stats.classList.toggle('collapsed', !panelOpen);
+  toggle.textContent = panelOpen ? '❮' : '❯';
+}
+</script>
+</body>
+</html>
